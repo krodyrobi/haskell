@@ -1,0 +1,22 @@
+Letrec 
+  "fibb"
+  (Lambda ["n"]
+    (If 
+      (Var "n" :==: Const (IntV 0))
+      (Const (IntV 0)) 
+      (If
+        (Var "n" :==: Const (IntV 1)) 
+        (Const (IntV 1))
+        
+        (Apply
+          (Var "fibb")
+          [Var "n" :-: Const (IntV 1)]
+        ) :+:
+       
+        Apply
+          (Var "fibb")
+          [Var "n" :-: Const (IntV 2)]
+      )
+    )
+  )
+  (Apply (Var "fibb") [Const (IntV 5)])
