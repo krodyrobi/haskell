@@ -1,22 +1,13 @@
 import Debug.Trace
 import qualified Data.Map as Map
 
-data Type = TVar Integer
+data Type = TVar Int
           | TArr Type Type
           | TInt
           | TBool
           deriving Eq
 
-instance Show Type where
-  show t = inner_show (standardize_type t)
-    where inner_show t = case t of
-            TInt -> "int"
-            TBool -> "bool"
-            TVar n -> "t" ++ show n
-            TArr arg res -> inner_show arg ++ " -> " ++ inner_show res
-
-
-data Val = IntVal Integer
+data Val = IntVal Int
          | BoolVal Bool
          | FunVal [String] Expr Env
          deriving (Show, Eq)
@@ -40,8 +31,17 @@ data Expr = Const Val
           | Apply Expr [Expr]
           deriving (Show, Eq)
 
-type Subst  = Map.Map Integer Type
-type Answer = (Type, Subst)
+type Subst  = Map.Map Int Type
+type Answer = (Int, Subst, Type)
+
+instance Show Type where
+  show t = inner_show (standardize_type t)
+    where inner_show t = case t of
+            TInt -> "int"
+            TBool -> "bool"
+            TVar n -> "t" ++ show n
+            TArr arg res -> inner_show arg ++ " -> " ++ inner_show res
+
 
 standardize_type :: Type -> Type
 standardize_type t =
@@ -49,7 +49,7 @@ standardize_type t =
   let label store t =
         case t of
           TVar n -> case Map.lookup n store of
-            Nothing -> Map.insert n (toInteger ((Map.size store) + 1)) store
+            Nothing -> Map.insert n ((Map.size store) + 1) store
             Just v  -> store
           TArr arg res -> label (label store arg) res
           TInt  -> store
@@ -63,6 +63,7 @@ standardize_type t =
           TInt -> TInt
           TBool -> TBool
   in process (label Map.empty t) t
+
 
 apply_one_subst :: Type -> Type -> Type -> Type
 apply_one_subst t0 tvar@(TVar n) t1 =
@@ -124,26 +125,57 @@ unifier t1 t2 subst expr =
 -- TODO test the unifier
 
 
-type_of :: Expr -> TEnv -> Subst -> Answer
-type_of expr tenv subst = case expr of
-  Const (IntVal n) -> (TInt, subst)
-  Const (BoolVal n) -> (TBool, subst)
-  e1 :+: e2 -> unify_bin_op e1 e2 TInt tenv subst
-  e1 :*: e2 -> unify_bin_op e1 e2 TInt tenv subst
-  --e1 :==: e2 -> e1
-  -- if
-  -- Var
-  -- Let
+type_of :: Expr -> Type
+type_of expr =
+  -- seq here is to stop haskell lazyly ommiting subst for some edgecases :|
+  subst `seq` ty
+  where
+    (_, subst, ty) = type_of' expr EmptyTEnv empty_subst 1
+
+    type_of' :: Expr -> TEnv -> Subst -> Int -> Answer
+    type_of' expr tenv subst index = case expr of
+      Const (IntVal n) -> (index, subst, TInt)
+      Const (BoolVal n) -> (index, subst, TBool)
+      Var name -> (index, subst, find tenv name)
+      e1 :+: e2 -> unify_bin_op e1 e2 TInt tenv subst index
+      e1 :*: e2 -> unify_bin_op e1 e2 TInt tenv subst index
+      e1 :==: e2 ->
+        (index2, res_subst, TBool)
+        where (index1, subst1, t1) = type_of' e1 tenv subst index
+              (index2, subst2, t2) = type_of' e2 tenv subst1 index1
+              res_subst = unifier t1 t2 subst2 expr
+      If cond true_expr false_expr ->
+        (index3, res_subst, t2)
+        where (index1, subst1, t1) = type_of' cond tenv subst index
+              subst1' = unifier t1 TBool subst1 cond
+              (index2, subst2, t2) = type_of' true_expr tenv subst1' index1
+              (index3, subst3, t3) = type_of' false_expr tenv subst2 index2
+              res_subst = unifier t2 t3 subst3 expr
+      Let name e1 body ->
+        type_of' body (add tenv name e1_t) subst1 index1
+        where (index1, subst1, e1_t) = type_of' e1 tenv subst index
+
+    unify_bin_op :: Expr -> Expr -> Type -> TEnv -> Subst -> Int -> Answer
+    unify_bin_op e1 e2 ty tenv subst index =
+      (index2, res_subst, ty)
+      where (index1, subst1', t1) = type_of' e1 tenv subst index
+            subst1 = unifier t1 ty subst1' e1
+            (index2, subst2, t2) = type_of' e2 tenv subst1 index1
+            res_subst = unifier t2 ty subst2 e2
 
 
-unify_bin_op e1 e2 ty tenv subst =
-  (ty, subst2)
-  where subst2 = unifier t2 ty subst2' e2
-        (t2, subst2') = type_of e2 tenv subst1
-        subst1 = unifier t1 ty subst1' e1
-        (t1, subst1') = type_of e1 tenv subst
+      -- | Const (FunVal [String] Expr Env)
+      -- | Lambda [String] Expr
+      -- | Apply Expr [Expr]
 
--- type_of_program
+find :: TEnv -> String -> Type
+find env name = case env of
+  ExtendedTEnv storedName t nextEnv -> if storedName == name then t else find nextEnv name
+  EmptyTEnv -> error $ "Variable not bound to a value: " ++ name
+
+
+add :: TEnv -> String -> Type -> TEnv
+add env name t = ExtendedTEnv name t env
 
 
 ---------------------------------------------------------------------
@@ -279,6 +311,14 @@ test_standardize_type2 =
 test_unifier = True
 -- OK type_of (Const (IntVal 3) :+: Const (IntVal 3)) EmptyTEnv empty_subst
 -- NOT OK type_of (Const (IntVal 3) :+: Const (BoolVal True)) EmptyTEnv empty_subst
+
+-- OK type_of (If (Const (BoolVal True)) (Const (IntVal 1)) (Const (IntVal 2))) EmptyTEnv empty_subst
+-- NOT type_of (If (Const (BoolVal True)) (Const (BoolVal False)) (Const (IntVal 2))) EmptyTEnv empty_subst
+-- NOT type_of (If (Const (IntVal 1)) (Const (IntVal 2)) (Const (IntVal 2))) EmptyTEnv empty_subst
+
+-- type_of (Const (IntVal 1) :+: Var "a") (ExtendedTEnv "a" TInt EmptyTEnv) empty_subst
+
+-- type_of (Const (IntVal 1) :==: Const (IntVal 2)) EmptyTEnv empty_subst
 
 ---------------------------------------------------------------------
 -- I know about all the places in code where patterns ar not exhaustive
