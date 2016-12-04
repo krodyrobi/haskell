@@ -9,7 +9,6 @@ data Type = TVar Int
 
 data Val = IntVal Int
          | BoolVal Bool
-         | FunVal [String] Expr Env
          deriving (Show, Eq)
 
 data Env = EmptyEnv
@@ -27,8 +26,8 @@ data Expr = Const Val
           | Expr :==: Expr
           | If Expr Expr Expr
           | Let String Expr Expr
-          | Lambda [String] Expr
-          | Apply Expr [Expr]
+          | Lambda String Expr
+          | Apply Expr Expr
           deriving (Show, Eq)
 
 type Subst  = Map.Map Int Type
@@ -154,6 +153,17 @@ type_of expr =
       Let name e1 body ->
         type_of' body (add tenv name e1_t) subst1 index1
         where (index1, subst1, e1_t) = type_of' e1 tenv subst index
+      Lambda name body ->
+        (index', subst', TArr fresh_var body_t)
+        where
+          fresh_var = TVar index
+          (index', subst', body_t) = type_of' body (add tenv name fresh_var) subst (index + 1)
+      Apply rator rand ->
+        (index2, subst3, result_t)
+        where result_t = TVar index
+              (index1, subst1, t1) = type_of' rator tenv subst (index + 1)
+              (index2, subst2, t2) = type_of' rand tenv subst1 index1
+              subst3 = unifier t1 (TArr t2 result_t) subst2 expr
 
     unify_bin_op :: Expr -> Expr -> Type -> TEnv -> Subst -> Int -> Answer
     unify_bin_op e1 e2 ty tenv subst index =
@@ -162,11 +172,6 @@ type_of expr =
             subst1 = unifier t1 ty subst1' e1
             (index2, subst2, t2) = type_of' e2 tenv subst1 index1
             res_subst = unifier t2 ty subst2 e2
-
-
-      -- | Const (FunVal [String] Expr Env)
-      -- | Lambda [String] Expr
-      -- | Apply Expr [Expr]
 
 find :: TEnv -> String -> Type
 find env name = case env of
@@ -319,6 +324,9 @@ test_unifier = True
 -- type_of (Const (IntVal 1) :+: Var "a") (ExtendedTEnv "a" TInt EmptyTEnv) empty_subst
 
 -- type_of (Const (IntVal 1) :==: Const (IntVal 2)) EmptyTEnv empty_subst
+-- type_of (Lambda "a" (Var "a" :==: Const (IntVal 2)))
+-- type_of (Lambda "a" (Var "a" :+: Const (IntVal 2)))
+-- type_of (Apply (Lambda "a" (Var "a" :==: Const(IntVal 1))) (Const(IntVal 2))
 
 ---------------------------------------------------------------------
 -- I know about all the places in code where patterns ar not exhaustive
