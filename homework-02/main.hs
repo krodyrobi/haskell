@@ -5,6 +5,7 @@ data Type = TVar Int
           | TArr Type Type
           | TInt
           | TBool
+          | TUnit
           deriving Eq
 
 data Val = IntVal Int
@@ -26,7 +27,7 @@ data Expr = Const Val
           | Expr :==: Expr
           | If Expr Expr Expr
           | Let String Expr Expr
-          | Lambda String Expr
+          | Lambda [String] Expr
           | Apply Expr Expr
           deriving (Show, Eq)
 
@@ -36,8 +37,9 @@ type Answer = (Int, Subst, Type)
 instance Show Type where
   show t = inner_show (standardize_type t)
     where inner_show t = case t of
-            TInt -> "int"
+            TInt  -> "int"
             TBool -> "bool"
+            TUnit -> "()"
             TVar n -> "t" ++ show n
             TArr arg res -> inner_show arg ++ " -> " ++ inner_show res
 
@@ -53,14 +55,16 @@ standardize_type t =
           TArr arg res -> label (label store arg) res
           TInt  -> store
           TBool -> store
+          TUnit -> store
       process store t =
         case t of
           TVar n -> case Map.lookup n store of
             Just v -> TVar v
             Nothing -> error "shouldn't happen"
           TArr arg res -> TArr (process store arg) (process store res)
-          TInt -> TInt
+          TInt  -> TInt
           TBool -> TBool
+          TUnit -> TUnit
   in process (label Map.empty t) t
 
 
@@ -70,6 +74,7 @@ apply_one_subst t0 tvar@(TVar n) t1 =
   case t0 of
     TInt         -> TInt
     TBool        -> TBool
+    TUnit        -> TUnit
     TVar _       -> if tvar == t0 then t1 else t0
     TArr arg res -> TArr (apply_one_subst arg tvar t1) (apply_one_subst res tvar t1)
 
@@ -79,6 +84,7 @@ apply_subst_to_type t subst =
   case t of
     TInt         -> TInt
     TBool        -> TBool
+    TUnit        -> TUnit
     TVar n       -> case Map.lookup n subst of
                       Nothing -> t
                       Just tt -> tt
@@ -93,6 +99,16 @@ extend_subst :: Subst -> Type -> Type -> Subst
 extend_subst old_subst tvar@(TVar n) t =
   -- inserts new substitution and applies all others as well
   Map.insert n t (Map.map (\x -> apply_one_subst x tvar t) old_subst)
+
+
+find :: TEnv -> String -> Type
+find env name = case env of
+  ExtendedTEnv storedName t nextEnv -> if storedName == name then t else find nextEnv name
+  EmptyTEnv -> error $ "Variable not bound to a value: " ++ name
+
+
+add :: TEnv -> String -> Type -> TEnv
+add env name t = ExtendedTEnv name t env
 
 
 no_occurrence :: Type -> Type -> Bool
@@ -120,8 +136,6 @@ unifier t1 t2 subst expr =
       _ -> error $ "Unification failure " ++ show ty1 ++ " != " ++ show ty2 ++ " in " ++ show expr
   where ty1 = apply_subst_to_type t1 subst
         ty2 = apply_subst_to_type t2 subst
-
--- TODO test the unifier
 
 
 type_of :: Expr -> Type
@@ -152,11 +166,21 @@ type_of expr =
       Let name e1 body ->
         type_of' body (add tenv name e1_t) subst1 index1
         where (index1, subst1, e1_t) = type_of' e1 tenv subst index
-      Lambda name body ->
-        (index', subst', TArr fresh_var body_t)
+      Lambda [] body ->
+        (index', subst', TArr TUnit body_t)
         where
-          fresh_var = TVar index
-          (index', subst', body_t) = type_of' body (add tenv name fresh_var) subst (index + 1)
+          (index', subst', body_t) = type_of' body tenv subst index
+      Lambda names body ->
+        (index', subst', get_arrow_type fvs)
+        where
+          (index0, tenv0, fvs) = foldl aux (index, tenv, []) names
+          (index', subst', body_t) = type_of' body tenv0 subst (index0 + 1)
+
+          aux (i, env, tvs) name = let tv = TVar i in (i + 1, add env name tv, tv:tvs)
+
+          -- can't be empty array as we've got at least an argument
+          get_arrow_type (x:[]) = TArr x body_t
+          get_arrow_type (x:xs) = TArr x (get_arrow_type xs)
       Apply rator rand ->
         (index2, subst3, result_t)
         where result_t = TVar index
@@ -171,15 +195,6 @@ type_of expr =
             subst1 = unifier t1 ty subst1' e1
             (index2, subst2, t2) = type_of' e2 tenv subst1 index1
             res_subst = unifier t2 ty subst2 e2
-
-find :: TEnv -> String -> Type
-find env name = case env of
-  ExtendedTEnv storedName t nextEnv -> if storedName == name then t else find nextEnv name
-  EmptyTEnv -> error $ "Variable not bound to a value: " ++ name
-
-
-add :: TEnv -> String -> Type -> TEnv
-add env name t = ExtendedTEnv name t env
 
 
 ---------------------------------------------------------------------
@@ -322,7 +337,9 @@ test_standardize_type2 =
 -- type_of (Let "a" (Const (IntVal 1) :==: Const (IntVal 2)) (Var "a"))
 -- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Var "func")))
 -- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Apply (Var "func") (Var "a"))))
---
+-- type_of (Lambda ["a", "b"] (Var "a" :+: Var "b"))
+-- type_of (Lambda ["a", "b"] (Var "a" :==: Var "b"))
+-- type_of (Lambda [] (Const (IntVal 1)))
 
 -- NOT OK type_of (Const (IntVal 3) :+: Const (BoolVal True))
 -- NOT type_of (If (Const (BoolVal True)) (Const (BoolVal False)) (Const (IntVal 2)))
