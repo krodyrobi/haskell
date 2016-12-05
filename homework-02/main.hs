@@ -28,7 +28,7 @@ data Expr = Const Val
           | If Expr Expr Expr
           | Let String Expr Expr
           | Lambda [String] Expr
-          | Apply Expr Expr
+          | Apply Expr [Expr]
           deriving (Show, Eq)
 
 type Subst  = Map.Map Int Type
@@ -173,21 +173,29 @@ type_of expr =
       Lambda names body ->
         (index', subst', get_arrow_type fvs)
         where
-          (index0, tenv0, fvs) = foldl aux (index, tenv, []) names
+          (index0, tenv0, fvs) = foldr aux (index, tenv, []) names
           (index', subst', body_t) = type_of' body tenv0 subst (index0 + 1)
 
-          aux (i, env, tvs) name = let tv = TVar i in (i + 1, add env name tv, tv:tvs)
+          aux name (i, env, tvs) = let tv = TVar i in (i + 1, add env name tv, tv:tvs)
 
           -- can't be empty array as we've got at least an argument
           get_arrow_type (x:[]) = TArr x body_t
           get_arrow_type (x:xs) = TArr x (get_arrow_type xs)
-      Apply rator rand ->
+      Apply rator args ->
         (index2, subst3, result_t)
         where result_t = TVar index
               (index1, subst1, t1) = type_of' rator tenv subst (index + 1)
-              (index2, subst2, t2) = type_of' rand tenv subst1 index1
-              subst3 = unifier t1 (TArr t2 result_t) subst2 expr
+              -- TODO clean this
+              (index2, subst2, t2, tvs) = foldr (\arg (i, s, t, tvs) -> let (i', s', t') = type_of' arg tenv s i
+                                                                        in  (i', s', t', t':tvs)) (index1, subst1, t1, []) args
 
+              subst3 = unifier t1 (get_arrow_type tvs) subst2 expr
+
+              -- TODO move this out 2 places
+              get_arrow_type (x:[]) = TArr x result_t
+              get_arrow_type (x:xs) = TArr x (get_arrow_type xs)
+
+    -- TODO rename and move out
     unify_bin_op :: Expr -> Expr -> Type -> TEnv -> Subst -> Int -> Answer
     unify_bin_op e1 e2 ty tenv subst index =
       (index2, res_subst, ty)
@@ -340,15 +348,16 @@ test_standardize_type2 =
 -- type_of (Lambda ["a", "b"] (Var "a" :+: Var "b"))
 -- type_of (Lambda ["a", "b"] (Var "a" :==: Var "b"))
 -- type_of (Lambda [] (Const (IntVal 1)))
-
--- NOT OK type_of (Const (IntVal 3) :+: Const (BoolVal True))
--- NOT type_of (If (Const (BoolVal True)) (Const (BoolVal False)) (Const (IntVal 2)))
--- NOT type_of (If (Const (IntVal 1)) (Const (IntVal 2)) (Const (IntVal 2)))
--- NOT OK type_of (Apply (Lambda "a" (Var "a" :==: (Const (BoolVal True)))) (Const(IntVal 1)))
+-- type_of (Apply (Lambda ["a"] (Var "a")) [Const(IntVal 1)])
+-- type_of (Apply (Lambda ["a"] ((Var "a") :==: (Var "a"))) [Const(IntVal 1)])
+-- type_of (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c"))
+-- type_of (Apply (Lambda ["a", "b", "c"] (Var "a" :*: Var "b")) [Const(IntVal 1)])
+-- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1)])
+-- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1), Const (IntVal 1)])
 
 -- TODO test add | find
 -- TODO test unifier
--- TODO make the type_of work with multi param functions
+-- TODO test type_of
 
 
 ---------------------------------------------------------------------
