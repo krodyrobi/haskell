@@ -126,8 +126,7 @@ unifier t1 t2 subst expr =
 
 type_of :: Expr -> Type
 type_of expr =
-  -- seq here is to stop haskell lazyly ommiting subst for some edgecases :|
-  subst `seq` ty
+  apply_subst_to_type ty subst
   where
     (_, subst, ty) = type_of' expr EmptyTEnv empty_subst 1
 
@@ -312,21 +311,28 @@ test_standardize_type2 =
   where result = standardize_type (TArr (TVar 10) (TArr (TVar 3) (TVar 13)))
 
 
-
-test_unifier = True
--- OK type_of (Const (IntVal 3) :+: Const (IntVal 3)) EmptyTEnv empty_subst
--- NOT OK type_of (Const (IntVal 3) :+: Const (BoolVal True)) EmptyTEnv empty_subst
-
--- OK type_of (If (Const (BoolVal True)) (Const (IntVal 1)) (Const (IntVal 2))) EmptyTEnv empty_subst
--- NOT type_of (If (Const (BoolVal True)) (Const (BoolVal False)) (Const (IntVal 2))) EmptyTEnv empty_subst
--- NOT type_of (If (Const (IntVal 1)) (Const (IntVal 2)) (Const (IntVal 2))) EmptyTEnv empty_subst
-
--- type_of (Const (IntVal 1) :+: Var "a") (ExtendedTEnv "a" TInt EmptyTEnv) empty_subst
-
--- type_of (Const (IntVal 1) :==: Const (IntVal 2)) EmptyTEnv empty_subst
--- type_of (Lambda "a" (Var "a" :==: Const (IntVal 2)))
+-- type_of (Const (IntVal 3) :+: Const (IntVal 3))
+-- type_of (Const (IntVal 1) :==: Const (IntVal 2))
+-- type_of (If (Const (BoolVal True)) (Const (IntVal 1)) (Const (IntVal 2)))
 -- type_of (Lambda "a" (Var "a" :+: Const (IntVal 2)))
--- type_of (Apply (Lambda "a" (Var "a" :==: Const(IntVal 1))) (Const(IntVal 2))
+-- type_of (Lambda "a" (Var "a" :+: Var "a"))
+-- type_of (Lambda "a" (Var "a" :==: Var "a"))
+-- type_of (Apply (Lambda "a" (Var "a" :==: Var "a")) (Const(IntVal 1)))
+-- type_of (Apply (Lambda "a" (Var "a" :==: Const(IntVal 1))) (Const(IntVal 2)))
+-- type_of (Let "a" (Const (IntVal 1) :==: Const (IntVal 2)) (Var "a"))
+-- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Var "func")))
+-- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Apply (Var "func") (Var "a"))))
+--
+
+-- NOT OK type_of (Const (IntVal 3) :+: Const (BoolVal True))
+-- NOT type_of (If (Const (BoolVal True)) (Const (BoolVal False)) (Const (IntVal 2)))
+-- NOT type_of (If (Const (IntVal 1)) (Const (IntVal 2)) (Const (IntVal 2)))
+-- NOT OK type_of (Apply (Lambda "a" (Var "a" :==: (Const (BoolVal True)))) (Const(IntVal 1)))
+
+-- TODO test add | find
+-- TODO test unifier
+-- TODO make the type_of work with multi param functions
+
 
 ---------------------------------------------------------------------
 -- I know about all the places in code where patterns ar not exhaustive
