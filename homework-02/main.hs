@@ -327,32 +327,101 @@ test_standardize_type2 =
   where result = standardize_type (TArr (TVar 10) (TArr (TVar 3) (TVar 13)))
 
 
--- type_of (Const (IntVal 3) :+: Const (IntVal 3))
--- type_of (Const (IntVal 1) :==: Const (IntVal 2))
--- type_of (If (Const (BoolVal True)) (Const (IntVal 1)) (Const (IntVal 2)))
--- type_of (Lambda "a" (Var "a" :+: Const (IntVal 2)))
--- type_of (Lambda "a" (Var "a" :+: Var "a"))
--- type_of (Lambda "a" (Var "a" :==: Var "a"))
--- type_of (Apply (Lambda "a" (Var "a" :==: Var "a")) (Const(IntVal 1)))
--- type_of (Apply (Lambda "a" (Var "a" :==: Const(IntVal 1))) (Const(IntVal 2)))
--- type_of (Let "a" (Const (IntVal 1) :==: Const (IntVal 2)) (Var "a"))
--- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Var "func")))
--- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Apply (Var "func") (Var "a"))))
--- type_of (Lambda ["a", "b"] (Var "a" :+: Var "b"))
--- type_of (Lambda ["a", "b"] (Var "a" :==: Var "b"))
--- type_of (Apply (Lambda ["a"] (Var "a")) [Const(IntVal 1)])
--- type_of (Apply (Lambda ["a"] ((Var "a") :==: (Var "a"))) [Const(IntVal 1)])
--- type_of (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c"))
--- type_of (Apply (Lambda ["a", "b", "c"] (Var "a" :*: Var "b")) [Const(IntVal 1)])
--- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1)])
--- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1), Const (IntVal 1)])
 
--- type_of (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1)))
--- type_of (Apply (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1))) [])
+test_add =
+  assert result (ExtendedTEnv "a" (TVar 13) EmptyTEnv) "test_add"
+  where result = add EmptyTEnv "a" (TVar 13)
 
--- TODO test add | find
--- TODO test unifier
--- TODO test type_of
+test_find =
+  assert result (TVar 13) "test_find"
+  where result = find (ExtendedTEnv "a" (TVar 13) EmptyTEnv) "a"
+
+
+
+test_type_of1 =
+  assert result (show TInt) "test_type_of1"
+  where result = show $ type_of (Const (IntVal 3) :+: Const (IntVal 3))
+
+test_type_of2 =
+  assert result (show TBool) "test_type_of2"
+  where result = show $ type_of (Const (IntVal 1) :==: Const (IntVal 2))
+
+test_type_of3 =
+  assert result (show TInt) "test_type_of3"
+  where result = show $ type_of (If (Const (BoolVal True)) (Const (IntVal 1)) (Const (IntVal 2)))
+
+test_type_of4 =
+  assert result (show (TArr TInt TInt)) "test_type_of4"
+  where result = show $ type_of (Lambda ["a"] (Var "a" :+: Const (IntVal 2)))
+
+test_type_of5 =
+  assert result (show (TArr TInt TInt)) "test_type_of5"
+  where result = show $ type_of (Lambda ["a"] (Var "a" :+: Var "a"))
+
+test_type_of6 =
+  assert result (show (TArr (TVar 1) TBool)) "test_type_of6"
+  where result = show $ type_of (Lambda ["a"] (Var "a" :==: Var "a"))
+
+test_type_of7 =
+  assert result (show TBool) "test_type_of7"
+  where result = show $ type_of (Apply (Lambda ["a"] (Var "a" :==: Var "a")) [Const(IntVal 1)])
+
+test_type_of8 =
+  assert result (show TBool) "test_type_of8"
+  where result = show $ type_of (Apply (Lambda ["a"] (Var "a" :==: Const(IntVal 1))) [Const(IntVal 2)])
+
+test_type_of9 =
+  assert result (show TBool) "test_type_of9"
+  where result = show $ type_of (Let "a" (Const (IntVal 1) :==: Const (IntVal 2)) (Var "a"))
+
+test_type_of10 =
+  assert result (show (TArr TInt TBool)) "test_type_of10"
+  where result = show $ type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda ["b"] (Var "b" :==: Var "a")) (Var "func")))
+
+test_type_of11 =
+  assert result (show TBool) "test_type_of11"
+  where result = show $ type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda ["b"] (Var "b" :==: Var "a")) (Apply (Var "func") [Var "a"])))
+
+test_type_of12 =
+  assert result (show $ TArr TInt $ TArr TInt TInt) "test_type_of12"
+  where result = show $ type_of (Lambda ["a", "b"] (Var "a" :+: Var "b"))
+
+test_type_of13 =
+  assert result (show $ TArr (TVar 1) (TArr (TVar 1) TBool)) "test_type_of13"
+  where result = show $ type_of (Lambda ["a", "b"] (Var "a" :==: Var "b"))
+
+test_type_of14 =
+  assert result (show TInt) "test_type_of14"
+  where result = show $ type_of (Apply (Lambda ["a"] (Var "a")) [Const(IntVal 1)])
+
+test_type_of15 =
+  assert result (show TBool) "test_type_of15"
+  where result = show $ type_of (Apply (Lambda ["a"] ((Var "a") :==: (Var "a"))) [Const(IntVal 1)])
+
+test_type_of16 =
+  assert result (show $ TArr (TVar 1) $ TArr (TVar 1) $ TArr TBool TBool) "test_type_of16"
+  where result = show $ type_of (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c"))
+
+test_type_of17 =
+  assert result (show $ TArr TInt $ TArr (TVar 1) $ TInt) "test_type_of17"
+  where result = show $ type_of (Apply (Lambda ["a", "b", "c"] (Var "a" :*: Var "b")) [Const(IntVal 1)])
+
+test_type_of18 =
+  assert result (show $ TArr TInt $ TArr TBool TBool) "test_type_of18"
+  where result = show $ type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1)])
+
+test_type_of19 =
+  assert result (show $ TArr TBool TBool) "test_type_of19"
+  where result = show $ type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1), Const (IntVal 1)])
+
+test_type_of20 =
+  assert result (show $ TArr TUnit TBool) "test_type_of20"
+  where result = show $ type_of (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1)))
+
+test_type_of21 =
+  assert result (show $ TBool) "test_type_of21"
+  where result = show $ type_of (Apply (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1))) [])
+
 
 
 ---------------------------------------------------------------------
@@ -396,7 +465,31 @@ testAll =
                     test_show4 &&
                     test_show5 &&
                     test_standardize_type1 &&
-                    test_standardize_type2
+                    test_standardize_type2 &&
+                    test_add &&
+                    test_find &&
+                    test_type_of1 &&
+                    test_type_of2 &&
+                    test_type_of3 &&
+                    test_type_of4 &&
+                    test_type_of5 &&
+                    test_type_of6 &&
+                    test_type_of7 &&
+                    test_type_of8 &&
+                    test_type_of9 &&
+                    test_type_of10 &&
+                    test_type_of11 &&
+                    test_type_of12 &&
+                    test_type_of13 &&
+                    test_type_of14 &&
+                    test_type_of15 &&
+                    test_type_of16 &&
+                    test_type_of17 &&
+                    test_type_of18 &&
+                    test_type_of19 &&
+                    test_type_of20 &&
+                    test_type_of21
+
 
 
 assert expected received message =
