@@ -166,21 +166,13 @@ type_of expr =
       Let name e1 body ->
         type_of' body (add tenv name e1_t) subst1 index1
         where (index1, subst1, e1_t) = type_of' e1 tenv subst index
-      Lambda [] body ->
-        (index', subst', TArr TUnit body_t)
-        where
-          (index', subst', body_t) = type_of' body tenv subst index
       Lambda names body ->
-        (index', subst', get_arrow_type fvs)
+        (index', subst', get_arrow_type fvs body_t)
         where
           (index0, tenv0, fvs) = foldr aux (index, tenv, []) names
           (index', subst', body_t) = type_of' body tenv0 subst (index0 + 1)
 
           aux name (i, env, tvs) = let tv = TVar i in (i + 1, add env name tv, tv:tvs)
-
-          -- can't be empty array as we've got at least an argument
-          get_arrow_type (x:[]) = TArr x body_t
-          get_arrow_type (x:xs) = TArr x (get_arrow_type xs)
       Apply rator args ->
         (index2, subst3, result_t)
         where result_t = TVar index
@@ -189,11 +181,12 @@ type_of expr =
               (index2, subst2, t2, tvs) = foldr (\arg (i, s, t, tvs) -> let (i', s', t') = type_of' arg tenv s i
                                                                         in  (i', s', t', t':tvs)) (index1, subst1, t1, []) args
 
-              subst3 = unifier t1 (get_arrow_type tvs) subst2 expr
+              subst3 = unifier t1 (get_arrow_type tvs result_t) subst2 expr
 
-              -- TODO move this out 2 places
-              get_arrow_type (x:[]) = TArr x result_t
-              get_arrow_type (x:xs) = TArr x (get_arrow_type xs)
+    get_arrow_type :: [Type] -> Type -> Type
+    get_arrow_type [] result_t = TArr TUnit result_t
+    get_arrow_type (x:[]) result_t = TArr x result_t
+    get_arrow_type (x:xs) result_t = TArr x (get_arrow_type xs result_t)
 
     -- TODO rename and move out
     unify_bin_op :: Expr -> Expr -> Type -> TEnv -> Subst -> Int -> Answer
@@ -347,13 +340,15 @@ test_standardize_type2 =
 -- type_of (Let "a" (Const (IntVal 1)) (Let "func" (Lambda "b" (Var "b" :==: Var "a")) (Apply (Var "func") (Var "a"))))
 -- type_of (Lambda ["a", "b"] (Var "a" :+: Var "b"))
 -- type_of (Lambda ["a", "b"] (Var "a" :==: Var "b"))
--- type_of (Lambda [] (Const (IntVal 1)))
 -- type_of (Apply (Lambda ["a"] (Var "a")) [Const(IntVal 1)])
 -- type_of (Apply (Lambda ["a"] ((Var "a") :==: (Var "a"))) [Const(IntVal 1)])
 -- type_of (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c"))
 -- type_of (Apply (Lambda ["a", "b", "c"] (Var "a" :*: Var "b")) [Const(IntVal 1)])
 -- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1)])
 -- type_of (Apply (Lambda ["a", "b", "c"] ((Var "a" :==: Var "b") :==: Var "c")) [Const(IntVal 1), Const (IntVal 1)])
+
+-- type_of (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1)))
+-- type_of (Apply (Lambda [] (Const (IntVal 1) :==: Const (IntVal 1))) [])
 
 -- TODO test add | find
 -- TODO test unifier
