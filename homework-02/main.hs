@@ -177,18 +177,18 @@ type_of expr =
         (index2, subst3, result_t)
         where result_t = TVar index
               (index1, subst1, t1) = type_of' rator tenv subst (index + 1)
-              -- TODO clean this
-              (index2, subst2, t2, tvs) = foldr (\arg (i, s, t, tvs) -> let (i', s', t') = type_of' arg tenv s i
-                                                                        in  (i', s', t', t':tvs)) (index1, subst1, t1, []) args
-
+              (index2, subst2, tvs) = foldr aux (index1, subst1, []) args
               subst3 = unifier t1 (get_arrow_type tvs result_t) subst2 expr
+
+              aux arg (i, s, tvs) = let (i', s', t') = type_of' arg tenv s i
+                                    in  (i', s', t':tvs)
+
 
     get_arrow_type :: [Type] -> Type -> Type
     get_arrow_type [] result_t = TArr TUnit result_t
     get_arrow_type (x:[]) result_t = TArr x result_t
     get_arrow_type (x:xs) result_t = TArr x (get_arrow_type xs result_t)
 
-    -- TODO rename and move out
     unify_bin_op :: Expr -> Expr -> Type -> TEnv -> Subst -> Int -> Answer
     unify_bin_op e1 e2 ty tenv subst index =
       (index2, res_subst, ty)
